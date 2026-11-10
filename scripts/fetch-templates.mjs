@@ -571,18 +571,6 @@ async function buildSongtianlun() {
  * who wrote it, with that author's post recorded. The corpus carries no images
  * (only the upstream links), so those cards show the placeholder thumbnail.
  */
-/** Category → one of the upstream's eight example images (images/README.md). */
-const YOUART_CATEGORY_IMAGE = {
-  poster: 'poster.webp',
-  'typography-text': 'poster.webp',
-  infographic: 'infographic.webp',
-  'ecommerce-product': 'product.webp',
-  'ad-creative': 'travel.webp',
-  'character-design': 'character-sheet.webp',
-  portrait: 'portrait.webp',
-  illustration: 'edit.webp',
-}
-
 async function buildYouart() {
   const base = `https://raw.githubusercontent.com/youart-open-source/awesome-gpt-image-2-5-prompts/${YOUART_COMMIT}`
   const payload = await fetchJson(`${base}/data/prompts.json`)
@@ -605,13 +593,7 @@ async function buildYouart() {
       sourceLabel: String(raw.author ?? ''),
       sourceUrl: normalizeHttpUrl(raw.sourceUrl),
       githubUrl: 'https://github.com/youart-open-source/awesome-gpt-image-2-5-prompts',
-      // The upstream repo publishes eight category-level example images
-      // (images/README.md) and no per-case picture, so a case borrows the
-      // example of its category. Categories without an example stay empty and
-      // the panel draws its placeholder.
-      image: YOUART_CATEGORY_IMAGE[category] === undefined
-        ? ''
-        : `${base}/images/examples/${YOUART_CATEGORY_IMAGE[category]}`,
+      image: '',
       featured: false,
     })
   }

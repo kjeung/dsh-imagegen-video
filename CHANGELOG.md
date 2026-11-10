@@ -5,13 +5,6 @@ Attribution for third-party code is in [NOTICE](./NOTICE).
 
 ## Releases
 
-### 1.27.3 — YouArt 2.5 卡片改用上游类别示例图
-
-- **先澄清：** YouArt 2.5（source `youart`）的 150 条案例按设计就没有逐条出图——上游 `data/prompts.json` 每个 case 只有 slug/title/category/prompt/署名，没有 image 字段，卡片一直画的是占位图标。之前报的 404 属于相邻的「GPT Image 2 案例库」（source `evolink`），那个已在 1.27.2 修掉。浏览器实测（CDP 驱动真实页面）确认：evolink 滚动一轮 561 个图片请求 **全部 200**、DOM 里 961 张图 **没有一张丢 commit**；youart 切过去 150 张占位、0 个图片请求。
-- **改进：** 上游仓库其实提供了 8 张类别级示例图（`images/examples/`，`images/README.md` 说明是 youart.ai 模板的演示图）。快照按类别把 case 指向对应示例（poster / typography-text → poster、infographic、ecommerce-product → product、ad-creative → travel、character-design → character-sheet、portrait、illustration → edit），150 条里 133 条因此有了真实缩略图；`ui-mockup` 类（17 条）上游没有对应示例，仍走占位。
-- **不越权：** 新增 `allowedImageFiles` 守卫，youart 渠道只放行那 8 个文件名，路由依旧只服务「当前列表里出现过的引用」，不会变成开放代理；`imageUrls` 也把那 8 个名字白名单化。
-- 文案：渠道描述改为「缩略图为上游提供的类别示例图，非该条案例的实际出图」，避免误读为逐条成果。测试：新增 C6a3（只允许 8 个上游文件名、空图只出现在无示例的类别），C6c2 相应去掉 youart 的「无图」豁免。
-
 ### 1.27.2 — 模板库图片 404（快照 URL 里的 `..` 遍历）
 
 - **修复：evolink（GPT-Image-2 提示词库）43 条 case 的预览图全部 404。** 上游 `cases/<category>.md` 把图片写成 `../../images/<case>/output.jpg`，而 `scripts/fetch-templates.mjs` 只剥掉一层 `..`，剩下的 `/../images/…` 被拼到 pinned commit 后面，成了 `…/<sha>/../images/…`。URL 解析时 `..` 会把 commit 一起吃掉，留下 `…/images/…`——`raw.githubusercontent.com` 把 `images` 当成分支名，于是 404（快照里 43 条命中，正好对应界面上整屏红叉）。

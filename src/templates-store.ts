@@ -47,9 +47,6 @@ interface TemplateSourceDef {
   allowedImageHosts?: readonly string[]
   /** Optional source-specific URL variants / mirrors for one image reference. */
   imageUrls?: (ref: string) => string[]
-  /** Extra guard for sources whose images are a fixed, upstream-owned set:
-   *  the reference must end with one of these file names. */
-  allowedImageFiles?: readonly string[]
   /**
    * Pre-1.6 single-source layout: refreshed copies and images lived in
    * unscoped paths. Read as a fallback so existing users keep their state
@@ -104,24 +101,11 @@ const SOURCE_DEFS: Record<string, TemplateSourceDef> = {
     refreshable: false,
     allowedImageHosts: ['raw.githubusercontent.com', 'cdn.openai.com'],
   },
-  // Its 150 cases carry no image of their own — only each author's post. The
-  // upstream repo ships eight category-level examples (images/README.md), and
-  // the snapshot points each case at the one matching its category, so the
-  // cards show a real sample instead of a placeholder. Cases whose category has
-  // no upstream example keep `image: ''` and still fall back to the placeholder.
+  // Its 150 cases carry no image of their own — only each author's post — so
+  // those cards show the placeholder thumbnail by design, not by failure.
   youart: {
     bundledPath: fileURLToPath(new URL('../src/templates/youart-cases.json', import.meta.url)),
     refreshable: false,
-    allowedImageHosts: ['raw.githubusercontent.com'],
-    /** Only the eight upstream example files, never an arbitrary path. */
-    allowedImageFiles: [
-      'character-sheet.webp', 'edit.webp', 'infographic.webp', 'portrait.webp',
-      'poster.webp', 'product.webp', 'storyboard.webp', 'travel.webp',
-    ],
-    imageUrls: (ref) => {
-      const match = /\/images\/examples\/([a-z-]+\.webp)$/i.exec(ref)
-      return match?.[1] !== undefined ? [ref] : []
-    },
   },
 }
 
@@ -475,12 +459,6 @@ function sniffImageMime(data: Buffer): string | undefined {
 
 /** True when an image reference is safe for a specific source. */
 function isAllowedImageRef(def: TemplateSourceDef, ref: string): boolean {
-  if (def.allowedImageFiles !== undefined) {
-    let pathname = ''
-    try { pathname = new URL(ref).pathname } catch { return false }
-    const name = pathname.split('/').pop() ?? ''
-    if (!def.allowedImageFiles.includes(name)) return false
-  }
   if (!/^https?:\/\//i.test(ref)) return ref.length > 0 && ref.length <= 400 && !ref.includes('\\') && !ref.includes('\0') && !ref.startsWith('/') && ref.split('/').every(segment => segment !== '' && segment !== '.' && segment !== '..') && !ref.includes('..')
   if (ref.length > MAX_IMAGE_URL_LENGTH || ref.includes('..')) return false
   try {

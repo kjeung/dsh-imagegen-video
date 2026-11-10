@@ -2994,29 +2994,6 @@ await check('C6a1 bundled template snapshots keep every image reference resolvab
   assert.equal(repaired.nested[0], 'https://example.com/keep/../me.png', 'non-ref traversals are left untouched')
 })
 
-await check('C6a3 youart borrows only the upstream example images', async () => {
-  // The upstream repo publishes eight category-level examples and no per-case
-  // picture. A case may point at one of those eight; anything else stays empty.
-  const snapshot = JSON.parse(readFileSync(new URL('src/templates/youart-cases.json', root), 'utf8'))
-  const allowed = [
-    'character-sheet.webp', 'edit.webp', 'infographic.webp', 'portrait.webp',
-    'poster.webp', 'product.webp', 'storyboard.webp', 'travel.webp',
-  ]
-  const images = snapshot.cases.map(entry => entry.image)
-  assert.ok(images.length > 0, 'youart ships cases')
-  for (const image of images) {
-    if (image === '') continue
-    assert.match(image, /^https:\/\/raw\.githubusercontent\.com\/youart-open-source\/awesome-gpt-image-2-5-prompts\/[0-9a-f]{40}\/images\/examples\/[a-z-]+\.webp$/,
-      `youart image must be a pinned upstream example, got ${image}`)
-    assert.ok(allowed.includes(image.split('/').pop()), `${image} is not one of the eight upstream examples`)
-  }
-  // Categories with no upstream example keep the placeholder, which is the
-  // only case that may be empty.
-  const empty = snapshot.cases.filter(entry => entry.image === '')
-  assert.ok(empty.every(entry => entry.category === 'ui-mockup'),
-    'only categories without an upstream example may be imageless')
-})
-
 await check('C6a2 URL-type template image references reach the backend', async () => {
   // issue #29: the encoded https:// inside the ref decodes to empty path
   // segments; the route must hand the full URL to the template store (which
@@ -3114,9 +3091,9 @@ await check('C6c2 bundled community template snapshots expose stable ids and ima
     evolink: { total: 967, first: 'ecommerce-1' },
     itgoyo: { total: 602, first: 't-001' },
     songtianlun: { total: 55, first: 'nb2-magazine-cover' },
-    // youart publishes no per-case image; its cards borrow one of the eight
-    // upstream category examples, so the image assertion applies (C6a3 pins
-    // exactly which files are legal).
+    // youart publishes no images of its own — only each author's post — so its
+    // cards are prompt-only by design and this source is exempt from the image
+    // assertion below.
     youart: { total: 150, first: '16-panel-female-dance-pose-sheet' },
   }
   for (const [sourceId, meta] of Object.entries(expected)) {
@@ -3124,10 +3101,12 @@ await check('C6c2 bundled community template snapshots expose stable ids and ima
     assert.equal(list.sourceId, sourceId)
     assert.equal(list.total, meta.total)
     assert.equal(list.cases[0].id, meta.first)
-    assert.match(list.cases[0].image, /^https:\/\//)
     if (sourceId === 'youart') {
+      assert.equal(list.cases[0].image, '', 'youart cases carry no image by design')
       assert.match(list.cases[0].sourceUrl, /^https:\/\/x\.com\//, 'the author post is the attribution')
+      continue
     }
+    assert.match(list.cases[0].image, /^https:\/\//)
   }
 })
 
