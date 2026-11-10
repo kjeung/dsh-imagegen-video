@@ -8,7 +8,7 @@
 export const IMAGEGEN_SETTINGS_NAMESPACE = 'dsh-imagegen'
 
 /** Published package version shared by the host updater and the client UI. */
-export const PLUGIN_VERSION = '1.27.2'
+export const PLUGIN_VERSION = '1.27.3'
 
 /** Same-origin route family (loopback-only, mirroring the dsh-ssh fence). */
 export const SETTINGS_API = {
@@ -536,7 +536,7 @@ export const TEMPLATE_SOURCES: TemplateSourceMeta[] = [
     id: 'youart',
     label: 'YouArt 2.5',
     homepage: 'https://github.com/youart-open-source/awesome-gpt-image-2-5-prompts',
-    description: '逐条署名到原作者与原始帖子的 GPT Image 2.5 提示词（CC BY 4.0，无示例图）',
+    description: '逐条署名到原作者与原始帖子的 GPT Image 2.5 提示词（CC BY 4.0；缩略图为上游提供的类别示例图，非该条案例的实际出图）',
     refreshable: false,
   },
 ]
