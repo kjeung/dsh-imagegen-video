@@ -26,7 +26,7 @@ import type {} from '@deepseek-ai/dsh-tools'
 // type-check time either.
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { IMAGEGEN_SETTINGS_NAMESPACE, isChannelProtocolPreference, isSubscriptionProvider, type CanvasSkillConfigApplyRequest, type CanvasSkillConfigApplyResult, type CanvasSkillConfigSaveRequest, type CanvasSkillConfigSaveResult, type CanvasSkillConfigView, type CanvasSkillInstallRequest, type CanvasSkillInstallResult, type CanvasSkillLibrary, type CanvasSkillRemoveResult, type ChannelConfig, type ModelMapping } from './protocol.ts'
-import { makeRoutes, type SettingsSeam } from './routes.ts'
+import { makeRoutes, parseAllowedHosts, type SettingsSeam } from './routes.ts'
 import { SubscriptionManager } from './subscription/manager.ts'
 import { syncAllTemplates } from './templates-store.ts'
 import { setStorageSyncHandler, putObject, type StorageSyncConfig } from './storage-sync.ts'
@@ -335,7 +335,7 @@ export const inject = ['webServer', 'systemPrompt', 'commands']
 
 // Internals re-exported for smoke tests and host-side debugging; the plugin
 // contract only requires name / inject / Config / apply.
-export { makeRoutes } from './routes.ts'
+export { makeRoutes, parseAllowedHosts } from './routes.ts'
 export { SubscriptionManager, vendorOf, subscriptionOauthRef } from './subscription/manager.ts'
 export { generateImage, ImageGenError } from './engine.ts'
 export { generateVideo, VideoGenError, isVideoModel } from './video-engine.ts'
@@ -415,6 +415,15 @@ export interface Config {
   defaultVideoModel?: string
   /** Allow Agents to submit and retrieve video-generation tasks. */
   allowAgentVideoGeneration?: boolean
+  /**
+   * Extra Host authorities trusted on the loopback route family, comma or
+   * newline separated (`dsh.example.com`, `example.com:8443`). Needed when a
+   * reverse proxy keeps the public Host verbatim: without it the plugin cannot
+   * tell that request apart from a DNS-rebinding attempt and answers 403.
+   * Empty falls back to the deployment proxy's own allowlist
+   * (`DSH_IMAGEGEN_ALLOWED_HOSTS`, then `PROXY_ALLOWED_HOSTS`).
+   */
+  allowedHosts?: string
   /** Local root for generated/history/gallery/canvas images. Empty keeps the default under DSH_HOME. */
   localStoragePath?: string
   /** Sync saved images to an S3-compatible object store (COS / OSS / Qiniu S3 …). */
@@ -495,6 +504,7 @@ const configSchema = z.object({
   defaultModel: z.string().default('').volatile(),
   defaultVideoModel: z.string().default('').volatile(),
   allowAgentVideoGeneration: z.boolean().default(true).volatile(),
+  allowedHosts: z.string().default('').volatile(),
   promptApiUrl: z.string().default('').volatile(),
   promptApiKey: z.string().role('secret').default('').volatile(),
   promptModel: z.string().default('').volatile(),
@@ -639,6 +649,8 @@ export interface EffectiveConfig {
   defaultVideoModel: string
   /** Allow Agents to submit and retrieve video-generation tasks. */
   allowAgentVideoGeneration: boolean
+  /** Host authorities the loopback routes accept besides 127.0.0.1/localhost. */
+  allowedHosts: string[]
   promptApiUrl: string
   promptApiKey: string
   promptModel: string
@@ -689,6 +701,24 @@ export function resolvePromptModelConfig(value: EffectiveConfig): PromptModelCon
  * @param ctx - host plugin context carrying webServer/systemPrompt.
  * @param config - resolved plugin config (schema defaults applied by the loader).
  */
+/**
+ * Authorities the loopback route family answers to besides 127.0.0.1/localhost.
+ *
+ * An explicit setting wins. Otherwise the deployment proxy's own allowlist is
+ * the next best declaration of the names this listener is meant to serve: the
+ * DSH container proxy keeps the public Host verbatim and strips every
+ * X-Forwarded-* header, so a proxied request looks exactly like a direct
+ * browser hit and must be told apart by configuration, never by heuristics.
+ */
+function resolveTrustedHosts(configured: string | undefined): string[] {
+  const explicit = parseAllowedHosts(configured)
+  if (explicit.length > 0) return explicit
+  return [
+    ...parseAllowedHosts(process.env.DSH_IMAGEGEN_ALLOWED_HOSTS),
+    ...parseAllowedHosts(process.env.PROXY_ALLOWED_HOSTS),
+  ]
+}
+
 export function apply(ctx: Context, config?: Config): (() => void) | void {
   // The live source the surfaces read: the settings section once the settings
   // service is attached, the composition entry otherwise.
@@ -737,6 +767,7 @@ export function apply(ctx: Context, config?: Config): (() => void) | void {
       announceToAgent: value.announceToAgent ?? DEFAULT_ANNOUNCE,
       allowAgentImageGeneration: value.allowAgentImageGeneration ?? DEFAULT_ALLOW_AGENT_IMAGE_GENERATION,
       allowAgentVideoGeneration: value.allowAgentVideoGeneration ?? true,
+      allowedHosts: resolveTrustedHosts(value.allowedHosts),
       channels: named.map(channel => ({
         ...channel,
         apiKey: typeof secrets[channel.id] === 'string' ? secrets[channel.id] : '',
@@ -1161,6 +1192,7 @@ export function apply(ctx: Context, config?: Config): (() => void) | void {
             return { apiUrl: channel?.apiUrl ?? '', apiKey: channel?.apiKey ?? '' }
           },
           resolveChannels: channelsView,
+          resolveAllowedHosts: () => resolve().allowedHosts,
           resolvePrompt: () => resolvePromptModelConfig(resolve()),
           resolveImageModels: () => {
             const value = resolve()

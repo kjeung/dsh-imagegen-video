@@ -154,6 +154,9 @@ export interface ImageGenRoutesDeps {
   resolvePrompt?: () => PromptModelConfig
   /** Models explicitly selected for this image API endpoint (legacy path). */
   resolveImageModels?: () => string[]
+  /** Extra Host authorities the loopback routes accept (see `parseAllowedHosts`).
+   *  Read per request so a settings edit applies without a restart. */
+  resolveAllowedHosts?: () => readonly string[]
   /** Host attachment storage used by Agent tool-result previews. */
   attachments?: {
     readImage: (ref: ImageAttachmentRef) => Promise<{ ref: ImageAttachmentRef; data: Uint8Array }>
@@ -288,10 +291,51 @@ export interface CanvasBackend {
   materialize?: (ref: CanvasAssetRef, targetPath: string) => Promise<void>
 }
 
-/** Loopback literal check plus browser same-origin markers (mirrors dsh-ssh). */
-function isLoopbackRequest(request: IncomingMessage): boolean {
+/** Body of a request the loopback fence refused: the prefix is the API contract,
+ *  the hint tells an operator what to change when a reverse proxy is in front. */
+const FORBIDDEN_LOOPBACK = {
+  error: 'forbidden: loopback-only',
+  hint: 'Reverse proxies keep the public Host, so the plugin refuses it until that authority is declared: set 设置 → 生图配置 → 允许的 Host (allowedHosts), or PROXY_ALLOWED_HOSTS on the deployment proxy.',
+}
+
+const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
+const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '[::1]', '::1'])
+
+/**
+ * Split an operator-supplied authority list (comma or newline separated) into
+ * normalized lower-case entries. Entries are Host headers — `host` or
+ * `host:port` — exactly as the browser sends them.
+ */
+export function parseAllowedHosts(raw: string | undefined): string[] {
+  if (raw === undefined) return []
+  return raw
+    .split(/[\s,]+/)
+    .map(entry => entry.trim().toLowerCase())
+    .filter(entry => entry !== '')
+}
+
+/**
+ * Whether one authority names the loopback host or an operator-allowlisted one.
+ *
+ * The loopback listener is reachable two ways: the browser talking to
+ * `127.0.0.1` directly, or a reverse proxy that keeps the public `Host`
+ * verbatim. The second case is indistinguishable from a DNS-rebinding request
+ * by headers alone, so it is never trusted implicitly — the operator has to
+ * declare those authorities (`allowedHosts`, or the deployment proxy's own
+ * `PROXY_ALLOWED_HOSTS`). A hostile page cannot forge them: it can only send
+ * its own domain as `Host`.
+ */
+function isTrustedAuthority(url: URL, allowedHosts: readonly string[]): boolean {
+  if (LOOPBACK_HOSTNAMES.has(url.hostname)) return true
+  const authority = url.host.toLowerCase()
+  const hostname = url.hostname.toLowerCase()
+  return allowedHosts.some(entry => entry === authority || entry === hostname)
+}
+
+/** Loopback literal check (plus allowlisted proxy hosts) and browser same-origin markers. */
+function isLoopbackRequest(request: IncomingMessage, allowedHosts: readonly string[] = []): boolean {
   const address = request.socket.remoteAddress
-  if (address !== '127.0.0.1' && address !== '::1' && address !== '::ffff:127.0.0.1') return false
+  if (address === undefined || !LOOPBACK_ADDRESSES.has(address)) return false
   const host = request.headers.host
   if (typeof host !== 'string') return false
   let hostUrl: URL
@@ -300,12 +344,18 @@ function isLoopbackRequest(request: IncomingMessage): boolean {
   } catch {
     return false
   }
-  if (hostUrl.hostname !== '127.0.0.1' && hostUrl.hostname !== 'localhost' && hostUrl.hostname !== '[::1]') return false
+  if (!isTrustedAuthority(hostUrl, allowedHosts)) return false
   if (request.headers['sec-fetch-site'] === 'cross-site') return false
   const origin = request.headers.origin
   if (origin === undefined) return true
   try {
-    return new URL(origin).host === hostUrl.host
+    const originUrl = new URL(origin)
+    // Same-origin: the Origin has to name the authority it addresses.
+    if (originUrl.host === hostUrl.host) return true
+    // A reverse proxy may drop a default port on one side; still require both
+    // sides to name the same trusted name.
+    return isTrustedAuthority(originUrl, allowedHosts)
+      && originUrl.hostname.toLowerCase() === hostUrl.hostname.toLowerCase()
   } catch {
     return false
   }
@@ -842,6 +892,9 @@ function failureOf(error: unknown): { ok: false; code: string; message: string }
  * @returns the route registrations.
  */
 export function makeRoutes(deps: ImageGenRoutesDeps): WebRoute[] {
+  /** The loopback fence, with the operator's proxy hosts allowed on top. */
+  const loopbackRequest = (req: IncomingMessage): boolean =>
+    isLoopbackRequest(req, deps.resolveAllowedHosts?.() ?? [])
   const modelRoutes: WebRoute[] = [
     { kind: 'exact', path: MODEL_API.list, handler: async (req, res) => { if (!guard(req, res, 'POST')) return; writeJson(res, 200, { ok: true, models: await listModels() }) } },
     { kind: 'exact', path: MODEL_API.save, handler: async (req, res) => { if (!guard(req, res, 'POST')) return; try { const body = await readJsonBody(req, MAX_JSON_BODY_BYTES); const model = await saveModel({ name: String(body?.name ?? ''), data: String(body?.data ?? ''), mime: String(body?.mime ?? 'image/png') }); writeJson(res, 200, { ok: true, model }) } catch (error) { writeJson(res, 400, { ok: false, code: 'model-save-failed', message: messageOf(error) }) } } },
@@ -933,7 +986,7 @@ export function makeRoutes(deps: ImageGenRoutesDeps): WebRoute[] {
     basePath: string,
     read: (file: string) => Promise<{ path: string; size: number; mime: string } | undefined>,
   ): Promise<void> => {
-    if (!isLoopbackRequest(req)) { writeJson(res, 403, { error: 'forbidden: loopback-only' }); return }
+    if (!loopbackRequest(req)) { writeJson(res, 403, FORBIDDEN_LOOPBACK); return }
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       writeJson(res, 405, { error: `method not allowed: ${req.method}` })
       return
@@ -1013,8 +1066,8 @@ export function makeRoutes(deps: ImageGenRoutesDeps): WebRoute[] {
     return { ok: true, request: { ...request, model: asked, upstream: mapping.id, channelId: picked.id, channel: picked.name } }
   }
   const guard = (req: IncomingMessage, res: ServerResponse, method: string): boolean => {
-    if (!isLoopbackRequest(req)) {
-      writeJson(res, 403, { error: 'forbidden: loopback-only' })
+    if (!loopbackRequest(req)) {
+      writeJson(res, 403, FORBIDDEN_LOOPBACK)
       return false
     }
     if (req.method !== method) {
@@ -1058,8 +1111,8 @@ export function makeRoutes(deps: ImageGenRoutesDeps): WebRoute[] {
       kind: 'prefix' as const,
       path: AGENT_IMAGE_API,
       handler: async (req: IncomingMessage, res: ServerResponse) => {
-        if (!isLoopbackRequest(req)) {
-          writeJson(res, 403, { error: 'forbidden: loopback-only' })
+        if (!loopbackRequest(req)) {
+          writeJson(res, 403, FORBIDDEN_LOOPBACK)
           return
         }
         if (req.method !== 'GET') {
@@ -1666,8 +1719,8 @@ export function makeRoutes(deps: ImageGenRoutesDeps): WebRoute[] {
       kind: 'prefix',
       path: HISTORY_API.image,
       handler: async (req, res) => {
-        if (!isLoopbackRequest(req)) {
-          writeJson(res, 403, { error: 'forbidden: loopback-only' })
+        if (!loopbackRequest(req)) {
+          writeJson(res, 403, FORBIDDEN_LOOPBACK)
           return
         }
         if (req.method !== 'GET') {
@@ -1824,8 +1877,8 @@ export function makeRoutes(deps: ImageGenRoutesDeps): WebRoute[] {
       kind: 'prefix',
       path: GALLERY_API.image,
       handler: async (req, res) => {
-        if (!isLoopbackRequest(req)) {
-          writeJson(res, 403, { error: 'forbidden: loopback-only' })
+        if (!loopbackRequest(req)) {
+          writeJson(res, 403, FORBIDDEN_LOOPBACK)
           return
         }
         if (req.method !== 'GET') {
@@ -2164,7 +2217,7 @@ export function makeRoutes(deps: ImageGenRoutesDeps): WebRoute[] {
       kind: 'prefix',
       path: CANVAS_API.asset,
       handler: async (req, res) => {
-        if (!isLoopbackRequest(req)) { writeJson(res, 403, { error: 'forbidden: loopback-only' }); return }
+        if (!loopbackRequest(req)) { writeJson(res, 403, FORBIDDEN_LOOPBACK); return }
         if (req.method !== 'GET') { writeJson(res, 405, { error: `method not allowed: ${req.method}` }); return }
         const file = imageFileFrom(req.url, CANVAS_API.asset)
         const found = file === undefined ? undefined : await canvas.readAsset(file)
@@ -2592,8 +2645,8 @@ export function makeRoutes(deps: ImageGenRoutesDeps): WebRoute[] {
       kind: 'prefix',
       path: TEMPLATES_API.image,
       handler: async (req, res) => {
-        if (!isLoopbackRequest(req)) {
-          writeJson(res, 403, { error: 'forbidden: loopback-only' })
+        if (!loopbackRequest(req)) {
+          writeJson(res, 403, FORBIDDEN_LOOPBACK)
           return
         }
         if (req.method !== 'GET') {

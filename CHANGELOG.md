@@ -5,6 +5,14 @@ Attribution for third-party code is in [NOTICE](./NOTICE).
 
 ## Releases
 
+### 1.27.1 — 反向代理入口不再 403（allowedHosts）
+
+- **修复：走反向代理访问时插件几乎所有接口都 403。** 根因在 `isLoopbackRequest`：它除了要求 socket 是 loopback，还要求 `Host` 是 `127.0.0.1` / `localhost` / `[::1]`。部署代理（如 `dsh-node-proxy`）会把公网域名原样透传，于是 `Host: dsh.dh.ci` 被判定为非 loopback，`/tasks/list`、`/video/tasks/list`、`/settings/*` 一律回 `403 {"error":"forbidden: loopback-only"}`。
+- **修复方式：新增 `allowedHosts` 配置**（逗号或换行分隔的 Host 权威，例如 `dsh.dh.ci`），守卫接受「loopback 字面量 ∪ 该白名单」；Origin 仍必须与 Host 同源，`sec-fetch-site: cross-site` 仍拒绝。默认空值保持原有只认 loopback 的行为，不隐式信任任何 Host——代理透传的请求与 DNS rebinding 在头部上完全同形，只能靠部署方显式声明区分（攻击页只能把自己域名放进 `Host`，伪造不了白名单里的名字）。
+- **没配也能用：** 空值时回退到 `DSH_IMAGEGEN_ALLOWED_HOSTS`，再回退到部署代理自己的 `PROXY_ALLOWED_HOSTS`。
+- **403 文案带上可操作提示**（`hint` 字段），不再只有一个 `loopback-only` 字符串；设置卡片「通用」区新增「允许的 Host」输入框（zh/en/ru 文案齐全）。
+- 测试：`scripts/smoke.mjs` 新增 C3a，覆盖「未声明仍 403」「已声明放行」「同 Host 不同 Origin 拒绝」「跨站标记拒绝」「host:port 精确匹配」「未声明主机不因别的白名单被放行」与解析函数归一化；原 C3 的 foreign-Host 403 断言不变。
+
 ### 1.27.0 — 千问生图 API；大图预览可按住拖动（一并发布 1.25.0 / 1.26.0）
 
 - **v1.24.0 之后的第一个发布版本。** 1.25.0（react-flow 画布引擎）与 1.26.0（画布布局对齐 LibTV）此前只推了代码、没有 tag 与 Release，它们的改动随本版一起发出，条目保留在下面各自的小节里。

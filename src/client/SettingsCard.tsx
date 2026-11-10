@@ -46,6 +46,8 @@ export interface ImageGenSettings {
   enabled?: boolean
   announceToAgent?: boolean
   allowAgentImageGeneration?: boolean
+  /** Extra Host authorities trusted behind a reverse proxy (comma/newline separated). */
+  allowedHosts?: string
   promptApiUrl?: string
   promptApiKey?: string
   promptModel?: string
@@ -75,6 +77,7 @@ export interface ImageGenSettingsCardState extends CardShell {
   /** System-prompt announcement flag. */
   announceToAgent: CardFieldState
   allowAgentImageGeneration: CardFieldState
+  allowedHosts: CardFieldState
   promptApiUrl: CardFieldState
   promptApiKey: CardFieldState
   promptModel: CardFieldState
@@ -129,6 +132,7 @@ export class ImageGenSettingsCardController {
       booleanField('enabled'),
       booleanField('announceToAgent'),
       booleanField('allowAgentImageGeneration'),
+      textField('allowedHosts'),
       textField('promptApiUrl'),
       secretField('promptApiKey'),
       textField('promptModel'),
@@ -162,6 +166,7 @@ export class ImageGenSettingsCardController {
       enabled: this.form.field('enabled'),
       announceToAgent: this.form.field('announceToAgent'),
       allowAgentImageGeneration: this.form.field('allowAgentImageGeneration'),
+      allowedHosts: this.form.field('allowedHosts'),
       promptApiUrl: this.form.field('promptApiUrl'),
       promptApiKey: this.form.field('promptApiKey'),
       promptModel: this.form.field('promptModel'),
@@ -1172,6 +1177,16 @@ export function ImageGenSettingsSection(props: ImageGenSettingsSectionProps) {
               {...state.allowAgentImageGeneration}
               onEdit={(text) => { props.edit('allowAgentImageGeneration', text) }}
               onReset={() => { props.resetField('allowAgentImageGeneration') }}
+            />
+            <ValueField
+              id="dsh-imagegen-settings-allowed-hosts"
+              label={t('settings.allowedHosts')}
+              hint={t('settings.allowedHostsHint')}
+              placeholder="dsh.example.com"
+              {...fieldProps}
+              {...state.allowedHosts}
+              onEdit={(text) => { props.edit('allowedHosts', text) }}
+              onReset={() => { props.resetField('allowedHosts') }}
             />
             </SettingsSection>
             <div className={css.footer}>

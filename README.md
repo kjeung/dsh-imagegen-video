@@ -350,6 +350,7 @@ dsh plugin --profile web add ./q253595422-dsh-imagegen-video-X.Y.Z.tgz
 - **端点是统一的**：文生图和图生图都走 `POST {apiUrl}/images/generations`。Agnes 没有 `/images/edits`，按 OpenAI 编辑协议发过去会被网关回 `503 no available server`；编辑请求把参考图放进 `extra_body.image`（公共 URL 或 `data:` URI，可多张），输出格式也写在 `extra_body.response_format` 里（顶层的 `response_format` 会被判为错误）。
 - **尺寸是档位 + 比例**：`size` 用 `1K` / `2K` / `3K` / `4K`，比例用 `ratio`（`1:1`、`3:4`、`4:3`、`16:9`、`9:16`、`2:3`、`3:2`、`21:9`）。插件把面板的清晰度档映射成 `size`、把画幅映射成 `ratio`，并且**不发** OpenAI 的 `quality`——Agnes 会直接 400（`quality is not supported by text image queue`）。
 
+- **反向代理 / 局域网入口**：插件的数据接口只对 loopback 开放，并额外校验 Host 头。反向代理会把公网域名原样透传（`Host: dsh.example.com`），这种请求与 DNS rebinding 在头部上同形，所以不会被自动信任——把入口域名填进「设置 → 生图配置 → 通用 → 允许的 Host」（`allowedHosts`，逗号或换行分隔）才会放行；留空时回退到 `DSH_IMAGEGEN_ALLOWED_HOSTS`，再回退到部署代理的 `PROXY_ALLOWED_HOSTS`。未声明的域名仍然 403，响应体里的 `hint` 会说明该配哪里。同一域名下的 `Origin` 必须与 `Host` 一致，跨站标记仍被拒绝。
 <details>
 <summary><b>接口与渠道补充说明</b></summary>
 

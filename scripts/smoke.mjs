@@ -2497,6 +2497,69 @@ await check('C3 generate route persists history server-side and enforces loopbac
   assert.equal(foreignStatus, 403)
 })
 
+await check('C3a allowedHosts admits a declared reverse-proxy host (#41)', async () => {
+  // A reverse proxy keeps the public Host verbatim and strips every
+  // X-Forwarded-* header, so a proxied request reaches the plugin looking
+  // exactly like a DNS-rebinding attempt. The declared authority is the only
+  // thing that separates them.
+  const build = allowedHosts => host.makeRoutes({
+    settings: { describe: () => [], mutate: async () => {} },
+    resolve: () => ({ apiUrl: '', apiKey: '' }),
+    ...(allowedHosts === undefined ? {} : { resolveAllowedHosts: () => allowedHosts }),
+  })
+  const call = async (routes, headers) => {
+    const route = routes.find(candidate => candidate.path === '/api/dsh-imagegen/settings/describe')
+    assert.ok(route !== undefined, 'the settings bridge route exists')
+    let status = 0
+    let body
+    await route.handler(
+      { method: 'POST', socket: { remoteAddress: '127.0.0.1' }, headers },
+      { writeHead(code) { status = code }, end(payload) { body = JSON.parse(payload) } },
+    )
+    return { status, body }
+  }
+  const proxied = {
+    host: 'dsh.example.com',
+    origin: 'https://dsh.example.com',
+    'sec-fetch-site': 'same-origin',
+  }
+
+  // Default deployment: the public Host stays refused, so nothing widens.
+  const refused = await call(build(undefined), proxied)
+  assert.equal(refused.status, 403, 'an undeclared proxy host is still refused')
+  assert.match(refused.body.error, /loopback-only/, 'the refusal keeps its wire contract')
+  assert.ok(typeof refused.body.hint === 'string' && refused.body.hint !== '', 'the refusal says what to configure')
+
+  // Declared: the same request reaches the bridge, which is what unsticks the
+  // panel behind the proxy.
+  const passed = await call(build(['dsh.example.com']), proxied)
+  assert.equal(passed.status, 200, 'a declared proxy host reaches the bridge')
+  assert.equal(passed.body.ok, true)
+
+  // A port-qualified declaration matches a Host that carries the same port.
+  const ported = await call(build(['dsh.example.com:8443']), {
+    ...proxied,
+    host: 'dsh.example.com:8443',
+    origin: 'https://dsh.example.com:8443',
+  })
+  assert.equal(ported.status, 200, 'a host:port declaration matches that exact authority')
+
+  // The declarations are additive, not a blanket amnesty.
+  assert.equal((await call(build(['dsh.example.com']), { ...proxied, host: 'other.example.com', origin: 'https://other.example.com' })).status, 403,
+    'an undeclared host is refused even when another host is declared')
+  assert.equal((await call(build(['dsh.example.com']), { ...proxied, origin: 'https://evil.example.com' })).status, 403,
+    'an Origin that names another site is refused')
+  assert.equal((await call(build(['dsh.example.com']), { ...proxied, 'sec-fetch-site': 'cross-site' })).status, 403,
+    'a cross-site browser marker is refused')
+  assert.equal((await call(build(['dsh.example.com']), { host: 'dsh.example.com' })).status, 200,
+    'a same-origin request without an Origin header still passes')
+
+  // The parser is the operator surface: whitespace and commas both separate.
+  assert.deepEqual(host.parseAllowedHosts(' a.example.com ,\nB.Example.com\n'), ['a.example.com', 'b.example.com'])
+  assert.deepEqual(host.parseAllowedHosts(''), [])
+  assert.deepEqual(host.parseAllowedHosts(undefined), [])
+})
+
 await check('C3b diagnostics routes read back and clear the retained attempts (#38)', async () => {
   // The panel reads this route after a failure; the record has to survive the
   // HTTP hop unchanged and stay redacted.
