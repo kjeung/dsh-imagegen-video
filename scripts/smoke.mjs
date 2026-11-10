@@ -2976,7 +2976,10 @@ await check('C6a1 bundled template snapshots keep every image reference resolvab
       refs += 1
       // Either a pinned commit or an explicit branch: what is forbidden is the
       // shape this bug produced, where the ref slot held an image directory.
-      assert.match(value, /^https:\/\/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/(?:[0-9a-f]{40}|main|master)\//,
+      // A ref segment must be present: a pinned commit, an explicit branch, or
+      // the `/refs/heads/<branch>/` spelling (the form that resolves when a
+      // plain branch segment would be read as a path component).
+      assert.match(value, /^https:\/\/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/(?:[0-9a-f]{40}|main|master|refs\/heads\/[a-z0-9._-]+)\//,
         `${file}: a raw ref must pin a commit, got ${value}`)
     }
   }
@@ -3003,6 +3006,20 @@ await check('C6a1 bundled template snapshots keep every image reference resolvab
     'https://raw.githubusercontent.com/o/r/e2a269ad1a055a0b4f6c1e170341c6c1aba30faa/images/x/output.jpg',
     'the commit is pinned back and the dot segment dropped')
   assert.equal(repaired.nested[0], 'https://example.com/keep/../me.png', 'non-ref traversals are left untouched')
+})
+
+await check('C6a3 youart cards borrow a unique evolink image, never a shared sample', async () => {
+  const snapshot = JSON.parse(readFileSync(new URL('src/templates/youart-cases.json', root), 'utf8'))
+  const images = snapshot.cases.map(entry => entry.image)
+  const filled = images.filter(Boolean)
+  assert.ok(filled.length >= 100, `youart should carry real per-case images, got ${filled.length}`)
+  // One picture per card: a shared sample is what made the gallery look broken.
+  assert.equal(new Set(filled).size, filled.length, 'every youart image must be unique to its card')
+  for (const image of filled) {
+    assert.match(image,
+      /^https:\/\/raw\.githubusercontent\.com\/Evolink-AI\/awesome-gpt-image-2-API-Prompts\/refs\/heads\/main\/images\/[a-z-]+_case\d+\/output\.jpg$/i,
+      `youart image must be a referenced evolink case file, got ${image}`)
+  }
 })
 
 await check('C6a2 URL-type template image references reach the backend', async () => {
@@ -3112,12 +3129,10 @@ await check('C6c2 bundled community template snapshots expose stable ids and ima
     assert.equal(list.sourceId, sourceId)
     assert.equal(list.total, meta.total)
     assert.equal(list.cases[0].id, meta.first)
-    if (sourceId === 'youart') {
-      assert.equal(list.cases[0].image, '', 'youart cases carry no image by design')
-      assert.match(list.cases[0].sourceUrl, /^https:\/\/x\.com\//, 'the author post is the attribution')
-      continue
-    }
     assert.match(list.cases[0].image, /^https:\/\//)
+    if (sourceId === 'youart') {
+      assert.match(list.cases[0].sourceUrl, /^https:\/\/x\.com\//, 'the author post is the attribution')
+    }
   }
 })
 

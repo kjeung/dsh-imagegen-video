@@ -5,6 +5,13 @@ Attribution for third-party code is in [NOTICE](./NOTICE).
 
 ## Releases
 
+### 1.27.4 — YouArt 2.5 卡片补上逐条预览图（115/150）
+
+- **来源：** YouArt 仓库本身没有逐条图（`images/` 只有 8 张类别示例），但它的 150 条里有 112 条提示词文本与 evolink 的某个 case 逐字相同（另有 3 条标题相同），而 evolink 每个 case 都带一张图。按提示词内容配对后，**115 条卡片各自拿到一张不同的图**，其余 35 条（upstream=youmind，evolink 里没有对应）保持占位。
+- **URL 形式按实测确定：** `https://raw.githubusercontent.com/Evolink-AI/awesome-gpt-image-2-API-Prompts/refs/heads/main/images/<category>_case<n>/output.jpg`，115 条逐一探测 **115/115 全部 200**。
+- **不共用图：** 上一版用类别示例图导致同类 15+ 张卡片同图，这版每张图只对应一条卡片（115 张唯一图 / 115 条），并有 C6a3 断言钉住「唯一性 + 必须指向 evolink case 文件」。
+- 放行 `raw.githubusercontent.com` 给 youart 源，`imageUrls` 只接 `Evolink-AI/…/images/…`；C6a1 现在接受 `refs/heads/<branch>` 这种显式 ref 写法。
+
 ### 1.27.3 — evolink 图源改用仓库现名，并把「ref 段」钉成测试不变量
 
 - **澄清两个曾经混在一起的问题。** 上游仓库早先叫 `EvoLinkAI/awesome-gpt-image-2-prompts`，现在是 `Evolink-AI/awesome-gpt-image-2-API-Prompts`；GitHub 对旧名做重定向，**改名本身不会造成 404**——实测旧名 + 老 SHA 仍是 200。真正的 404 只有一个原因：路径里的 ref 段被 `..` 吃掉，raw 于是把第一段 `images` 当成分支名。两种正确写法（`/<40位SHA>/images/…` 与 `/refs/heads/main/images/…`）实测都是 200。

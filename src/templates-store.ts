@@ -103,9 +103,15 @@ const SOURCE_DEFS: Record<string, TemplateSourceDef> = {
   },
   // Its 150 cases carry no image of their own — only each author's post — so
   // those cards show the placeholder thumbnail by design, not by failure.
+  // The GitHub repo has no per-case picture, but 115 of its 150 prompts are the
+  // same text as an evolink case, and evolink does ship one image per case.
+  // Those cards borrow that case's picture — one image per card, never shared.
+  // The remaining 35 keep the placeholder.
   youart: {
     bundledPath: fileURLToPath(new URL('../src/templates/youart-cases.json', import.meta.url)),
     refreshable: false,
+    allowedImageHosts: ['raw.githubusercontent.com'],
+    imageUrls: (ref) => (/^https:\/\/raw\.githubusercontent\.com\/Evolink-AI\/awesome-gpt-image-2-API-Prompts\//i.test(ref)) ? [ref] : [],
   },
 }
 
