@@ -5,6 +5,12 @@ Attribution for third-party code is in [NOTICE](./NOTICE).
 
 ## Releases
 
+### 1.27.2 — 模板库图片 404（快照 URL 里的 `..` 遍历）
+
+- **修复：evolink（GPT-Image-2 提示词库）43 条 case 的预览图全部 404。** 上游 `cases/<category>.md` 把图片写成 `../../images/<case>/output.jpg`，而 `scripts/fetch-templates.mjs` 只剥掉一层 `..`，剩下的 `/../images/…` 被拼到 pinned commit 后面，成了 `…/<sha>/../images/…`。URL 解析时 `..` 会把 commit 一起吃掉，留下 `…/images/…`——`raw.githubusercontent.com` 把 `images` 当成分支名，于是 404（快照里 43 条命中，正好对应界面上整屏红叉）。
+- **三处一起改**：生成脚本改为剥掉全部前导 `../` / `./` 段；随包快照里的 43 条 URL 就地修成 `…/<sha>/images/…`（实测 200）；`templates-store` 读快照时做 `repairSnapshotImageRefs` 归一化，已缓存到 `~/.dsh/dsh-imagegen/templates/` 的旧快照无需重新下载即可自愈，其余含 `..` 的 URL 不受影响。
+- 测试：`scripts/smoke.mjs` 新增 C6a1，断言所有随包快照不含 `/../`、raw 引用必须按 commit 或显式分支寻址，并覆盖归一化函数「改 ref 遍历、不动无关路径」。
+
 ### 1.27.1 — 反向代理入口不再 403（allowedHosts）
 
 - **修复：走反向代理访问时插件几乎所有接口都 403。** 根因在 `isLoopbackRequest`：它除了要求 socket 是 loopback，还要求 `Host` 是 `127.0.0.1` / `localhost` / `[::1]`。部署代理（如 `dsh-node-proxy`）会把公网域名原样透传，于是 `Host: dsh.dh.ci` 被判定为非 loopback，`/tasks/list`、`/video/tasks/list`、`/settings/*` 一律回 `403 {"error":"forbidden: loopback-only"}`。

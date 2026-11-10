@@ -374,7 +374,11 @@ async function buildPromptSignal() {
 function evolinkImage(value) {
   let raw = String(value ?? '').trim().replaceAll('&amp;', '&')
   if (raw === '') return ''
-  if (raw.startsWith('../')) raw = `/${raw.replace(/^\.\.\/+/, '')}`
+  // `cases/<category>.md` links its images as `../../images/…`. Stripping one
+  // `..` segment left `/../images/…`, which resolved to a path with no commit
+  // and made raw.githubusercontent treat `images` as a branch (404), so strip
+  // every leading `../` (and `./`) segment instead.
+  if (/^\.\.?\//.test(raw)) raw = `/${raw.replace(/^(?:\.\.?\/)+/, '')}`
   if (raw.startsWith('/')) {
     return `https://raw.githubusercontent.com/EvoLinkAI/awesome-gpt-image-2-prompts/${EVOLINK_COMMIT}${raw}`
   }

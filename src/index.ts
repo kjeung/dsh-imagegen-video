@@ -362,7 +362,7 @@ export { latestSessionImage, registerEditImageCommand } from './edit-image-comma
 export { PptTaskStore } from './ppt-task-store.ts'
 export { pptActivity, PptProgressMonitor } from './ppt-progress.ts'
 export { appendGallery, appendGalleryVideo, clearGallery, GALLERY_TRASH_RETENTION_MS, listGallery, listGalleryTrash, purgeGallery, readGalleryImage, readGalleryVideo, removeGallery, restoreGallery, updateGalleryTags } from './gallery-store.ts'
-export { listTemplates, readTemplateImage, refreshTemplates, sampleTemplates, syncAllTemplates, clearTemplateMemo } from './templates-store.ts'
+export { listTemplates, readTemplateImage, refreshTemplates, sampleTemplates, syncAllTemplates, clearTemplateMemo, repairSnapshotImageRefs } from './templates-store.ts'
 export { addTemplateFavorite, clearTemplateFavoritesMemo, listTemplateFavorites, removeTemplateFavorite } from './template-favorites.ts'
 export { putObject, setStorageSyncHandler, testStorage, type StorageSyncConfig } from './storage-sync.ts'
 export { agentSessionFailure, SkillRunner, setSkillTranslate, setSkillLanguage, canvasSkillCopy } from './skill-runner.ts'

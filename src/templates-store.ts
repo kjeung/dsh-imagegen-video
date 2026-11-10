@@ -266,9 +266,35 @@ function parseSnapshot(payload: unknown): { cases: TemplateCase[]; repository: s
 }
 
 /** Read + parse a snapshot file; undefined when missing/corrupt. */
+/** `…/<commit>/../images/x.jpg` — a snapshot ref that walks out of its commit. */
+const SNAPSHOT_REF_TRAVERSAL = /\/([0-9a-f]{40})\/\.\.\//g
+
+/**
+ * Repair snapshot image references that walk out of their pinned commit.
+ *
+ * Upstream markdown under `cases/` links images as `../../images/…`, and an
+ * older fetch script stripped only one `..` segment, so shipped snapshots (and
+ * any refreshed copy of them) hold `<sha>/../images/…`. The URL parser drops
+ * the traversal and the commit with it, leaving `…/images/…`, which
+ * raw.githubusercontent reads as a branch called `images` and answers 404. The
+ * author meant `<sha>/images/…`, so pin the commit back and drop the dot
+ * segment. Applied on read so an already-cached snapshot heals without a
+ * refresh.
+ */
+export function repairSnapshotImageRefs<T>(value: T): T {
+  if (typeof value === 'string') return value.replace(SNAPSHOT_REF_TRAVERSAL, '/$1/') as T
+  if (Array.isArray(value)) return value.map(entry => repairSnapshotImageRefs(entry)) as T
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) out[key] = repairSnapshotImageRefs(entry)
+    return out as T
+  }
+  return value
+}
+
 async function readSnapshotFile(file: string): Promise<ReturnType<typeof parseSnapshot>> {
   try {
-    return parseSnapshot(JSON.parse(await fs.readFile(file, 'utf8')))
+    return parseSnapshot(repairSnapshotImageRefs(JSON.parse(await fs.readFile(file, 'utf8'))))
   } catch {
     return undefined
   }

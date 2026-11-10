@@ -15,7 +15,7 @@ import assert from 'node:assert/strict'
 import vm from 'node:vm'
 import { EventEmitter } from 'node:events'
 import { Readable } from 'node:stream'
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { promises as fsPromises } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
@@ -2949,6 +2949,49 @@ await check('C6 template routes are source-scoped, refresh per source, and proxy
   assert.equal(legacy.status, 404)
   const badPool = await fetch(`http://127.0.0.1:${port}/api/dsh-imagegen/templates/image/canghe/case1.png`)
   assert.equal(badPool.status, 404)
+})
+
+await check('C6a1 bundled template snapshots keep every image reference resolvable', async () => {
+  // A snapshot ref of the shape `<sha>/../images/x.jpg` resolves to
+  // `…/images/x.jpg`: the URL parser drops the commit, raw.githubusercontent
+  // reads `images` as a branch name and answers 404, so the whole gallery went
+  // blank. Assert the shipped data has no traversal, and that every
+  // raw.githubusercontent ref still names a commit.
+  const dir = new URL('src/templates/', root)
+  const files = readdirSync(dir).filter(name => name.endsWith('.json'))
+  assert.ok(files.length > 0, 'the package ships template snapshots')
+  let refs = 0
+  for (const file of files) {
+    const text = readFileSync(new URL(file, dir), 'utf8')
+    assert.ok(!text.includes('/../'), `${file} must not carry dot-segment traversals`)
+    const snapshot = JSON.parse(text)
+    const strings = []
+    const walk = value => {
+      if (typeof value === 'string') strings.push(value)
+      else if (Array.isArray(value)) value.forEach(walk)
+      else if (value !== null && typeof value === 'object') Object.values(value).forEach(walk)
+    }
+    walk(snapshot)
+    for (const value of strings.filter(entry => entry.includes('raw.githubusercontent.com'))) {
+      refs += 1
+      // Either a pinned commit or an explicit branch: what is forbidden is the
+      // shape this bug produced, where the ref slot held an image directory.
+      assert.match(value, /^https:\/\/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/(?:[0-9a-f]{40}|main|master)\//,
+        `${file}: a raw ref must pin a commit, got ${value}`)
+    }
+  }
+  assert.ok(refs > 0, 'snapshots still carry raw image refs')
+
+  // The runtime repair heals snapshots that were cached before the data fix.
+  const broken = {
+    cases: [{ image: 'https://raw.githubusercontent.com/o/r/e2a269ad1a055a0b4f6c1e170341c6c1aba30faa/../images/x/output.jpg' }],
+    nested: ['https://example.com/keep/../me.png'],
+  }
+  const repaired = host.repairSnapshotImageRefs(broken)
+  assert.equal(repaired.cases[0].image,
+    'https://raw.githubusercontent.com/o/r/e2a269ad1a055a0b4f6c1e170341c6c1aba30faa/images/x/output.jpg',
+    'the commit is pinned back and the dot segment dropped')
+  assert.equal(repaired.nested[0], 'https://example.com/keep/../me.png', 'non-ref traversals are left untouched')
 })
 
 await check('C6a2 URL-type template image references reach the backend', async () => {
