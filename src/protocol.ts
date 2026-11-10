@@ -8,7 +8,7 @@
 export const IMAGEGEN_SETTINGS_NAMESPACE = 'dsh-imagegen'
 
 /** Published package version shared by the host updater and the client UI. */
-export const PLUGIN_VERSION = '1.27.2'
+export const PLUGIN_VERSION = '1.27.3'
 
 /** Same-origin route family (loopback-only, mirroring the dsh-ssh fence). */
 export const SETTINGS_API = {
@@ -514,7 +514,7 @@ export const TEMPLATE_SOURCES: TemplateSourceMeta[] = [
   {
     id: 'evolink',
     label: 'GPT Image 2 案例库',
-    homepage: 'https://github.com/EvoLinkAI/awesome-gpt-image-2-prompts',
+    homepage: 'https://github.com/Evolink-AI/awesome-gpt-image-2-API-Prompts',
     description: 'EvoLink 整理的 GPT Image 2 电商、广告、人像、海报、角色与 UI 案例',
     refreshable: false,
   },

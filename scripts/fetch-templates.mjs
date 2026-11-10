@@ -380,10 +380,10 @@ function evolinkImage(value) {
   // every leading `../` (and `./`) segment instead.
   if (/^\.\.?\//.test(raw)) raw = `/${raw.replace(/^(?:\.\.?\/)+/, '')}`
   if (raw.startsWith('/')) {
-    return `https://raw.githubusercontent.com/EvoLinkAI/awesome-gpt-image-2-prompts/${EVOLINK_COMMIT}${raw}`
+    return `https://raw.githubusercontent.com/Evolink-AI/awesome-gpt-image-2-API-Prompts/${EVOLINK_COMMIT}${raw}`
   }
   const oldPrefix = /^https:\/\/raw\.githubusercontent\.com\/EvoLinkAI\/awesome-gpt-image-2-API-and-Prompts\/[^/]+/i
-  if (oldPrefix.test(raw)) raw = raw.replace(oldPrefix, `https://raw.githubusercontent.com/EvoLinkAI/awesome-gpt-image-2-prompts/${EVOLINK_COMMIT}`)
+  if (oldPrefix.test(raw)) raw = raw.replace(oldPrefix, `https://raw.githubusercontent.com/Evolink-AI/awesome-gpt-image-2-API-Prompts/${EVOLINK_COMMIT}`)
   return normalizeHttpUrl(raw)
 }
 
@@ -420,7 +420,7 @@ function evolinkCase(block, meta) {
     scenes: [],
     sourceLabel: author === '' ? '' : `@${author}`,
     sourceUrl: normalizeHttpUrl(block.headingUrl ?? inlineTitle?.[2] ?? sourceMatch?.[2]),
-    githubUrl: 'https://github.com/EvoLinkAI/awesome-gpt-image-2-prompts',
+    githubUrl: 'https://github.com/Evolink-AI/awesome-gpt-image-2-API-Prompts',
     image: evolinkImage(imageMatch?.[1]),
     featured: false,
   }
@@ -436,7 +436,7 @@ function evolinkCase(block, meta) {
  * carried, which is what `covered` tracks.
  */
 async function buildEvolink() {
-  const base = `https://raw.githubusercontent.com/EvoLinkAI/awesome-gpt-image-2-prompts/${EVOLINK_COMMIT}`
+  const base = `https://raw.githubusercontent.com/Evolink-AI/awesome-gpt-image-2-API-Prompts/${EVOLINK_COMMIT}`
   const cases = []
   const covered = new Set()
   const usedIds = new Map()
@@ -462,9 +462,9 @@ async function buildEvolink() {
   }
   cases.sort((a, b) => a.number - b.number || a.id.localeCompare(b.id))
   return makeSnapshot(
-    'https://github.com/EvoLinkAI/awesome-gpt-image-2-prompts',
+    'https://github.com/Evolink-AI/awesome-gpt-image-2-API-Prompts',
     cases.map(({ number: _number, ...item }) => item),
-    `https://github.com/EvoLinkAI/awesome-gpt-image-2-prompts/tree/${EVOLINK_COMMIT}`,
+    `https://github.com/Evolink-AI/awesome-gpt-image-2-API-Prompts/tree/${EVOLINK_COMMIT}`,
   )
 }
 

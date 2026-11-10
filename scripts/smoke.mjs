@@ -2982,6 +2982,17 @@ await check('C6a1 bundled template snapshots keep every image reference resolvab
   }
   assert.ok(refs > 0, 'snapshots still carry raw image refs')
 
+  // A ref without a ref-segment makes raw read the first path piece as a
+  // branch name and 404; the repo also renamed, and the old name only survives
+  // on GitHub's redirect. Pin both invariants for the evolink corpus.
+  const evolink = JSON.parse(readFileSync(new URL('src/templates/evolink-cases.json', root), 'utf8'))
+  const evolinkRefs = new Set(evolink.cases.map(entry => entry.image).filter(Boolean))
+  assert.ok(evolinkRefs.size > 900, 'evolink carries its image corpus')
+  for (const ref of evolinkRefs) {
+    assert.match(ref, /^https:\/\/raw\.githubusercontent\.com\/Evolink-AI\/awesome-gpt-image-2-API-Prompts\/[0-9a-f]{40}\/images\/[a-z-]+_case\d+\/output\.jpg$/i,
+      `evolink image must name the current repo and a pinned commit, got ${ref}`)
+  }
+
   // The runtime repair heals snapshots that were cached before the data fix.
   const broken = {
     cases: [{ image: 'https://raw.githubusercontent.com/o/r/e2a269ad1a055a0b4f6c1e170341c6c1aba30faa/../images/x/output.jpg' }],

@@ -5,6 +5,13 @@ Attribution for third-party code is in [NOTICE](./NOTICE).
 
 ## Releases
 
+### 1.27.3 — evolink 图源改用仓库现名，并把「ref 段」钉成测试不变量
+
+- **澄清两个曾经混在一起的问题。** 上游仓库早先叫 `EvoLinkAI/awesome-gpt-image-2-prompts`，现在是 `Evolink-AI/awesome-gpt-image-2-API-Prompts`；GitHub 对旧名做重定向，**改名本身不会造成 404**——实测旧名 + 老 SHA 仍是 200。真正的 404 只有一个原因：路径里的 ref 段被 `..` 吃掉，raw 于是把第一段 `images` 当成分支名。两种正确写法（`/<40位SHA>/images/…` 与 `/refs/heads/main/images/…`）实测都是 200。
+- **快照改用现名。** 952 条图片 URL 与 6 处源码常量、`protocol.ts` 的主页链接一起换成 `Evolink-AI/awesome-gpt-image-2-API-Prompts`，不再依赖 GitHub 的重定向；`prompt-signal` 快照里两条署名链接同步更新。换名前后各跑一次全量探测，**952/952 全部 200**。
+- **把不变量写成测试。** C6a1 之外新增 evolink 专用断言：每条 `image` 必须是「当前仓库名 + 40 位 commit + `/images/<category>_case<n>/output.jpg`」，缺 ref 段或退回旧名都会直接失败；类别名允许连字符（`ad-creative_case174` 这类）。
+- 验证：浏览器内滚到底部，920 个图片请求 **全 200、4xx 为 0**，DOM 959 张图零破图、零缺 commit。
+
 ### 1.27.2 — 模板库图片 404（快照 URL 里的 `..` 遍历）
 
 - **修复：evolink（GPT-Image-2 提示词库）43 条 case 的预览图全部 404。** 上游 `cases/<category>.md` 把图片写成 `../../images/<case>/output.jpg`，而 `scripts/fetch-templates.mjs` 只剥掉一层 `..`，剩下的 `/../images/…` 被拼到 pinned commit 后面，成了 `…/<sha>/../images/…`。URL 解析时 `..` 会把 commit 一起吃掉，留下 `…/images/…`——`raw.githubusercontent.com` 把 `images` 当成分支名，于是 404（快照里 43 条命中，正好对应界面上整屏红叉）。
